@@ -1,134 +1,137 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <vector>
+#include <string.h>
+#include <openssl/md5.h>
+#include <openssl/evp.h>
+#include <sstream>
+#include <iomanip>
 
-static void error_callback(int error, const char* description)
-{
+std::string encode_hash_fstr_md5(const std::string& str_for_encode){
+    unsigned char digest[MD5_DIGEST_LENGTH];
 
-    std::cerr << description << std::endl;
-}
-static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GL_TRUE);
-}
+    MD5(reinterpret_cast<const unsigned char*>(str_for_encode.c_str()),
+        str_for_encode.size(),
+        digest);
 
-struct point
-{
-    point()
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+
+    for (int i = 0; i < MD5_DIGEST_LENGTH; i++)
     {
-        x = 0.0;
-        y = 0.0;
+        oss << std::setw(2) << static_cast<int>(digest[i]);
     }
 
-    point(float px, float py)
-    {
-        x = px;
-        y = py;
-    }
-
-    float x;
-    float y;
-};
-
-struct triangle
-{
-    triangle(point t, point bl, point br )
-    {
-        top = t;
-        bot_left = bl;
-        bot_right = br;
-    }
-
-    point top;
-    point bot_left;
-    point bot_right;
-};
-
-// Generate the Sierpinski triangle with a given level
-void generateTriangle(std::vector<triangle>& tr, int level, point top_point, point left_point, point right_point)
-{
-    if (level == 0)
-    {
-
-        tr.push_back(triangle(top_point, left_point, right_point));
-    }
-    else
-    {
-        // Find the edge midpoints.
-        point left_mid = point(
-            (top_point.x + left_point.x) / 2.0,
-            (top_point.y + left_point.y) / 2.0);
-        point right_mid = point(
-            (top_point.x + right_point.x) / 2.0,
-            (top_point.y + right_point.y) / 2.0);
-        point bottom_mid = point(
-            (left_point.x + right_point.x) / 2.0,
-            (left_point.y + right_point.y) / 2.0);
-
-
-        // Recursively generate smaller triangles.
-        generateTriangle(tr, level - 1, top_point, left_mid, right_mid);
-        generateTriangle(tr, level - 1, left_mid, left_point, bottom_mid);
-        generateTriangle(tr, level - 1, right_mid, bottom_mid, right_point);
-    }
+    return oss.str();
 }
 
-int main(void)
+std::string encode_hash_fstr_sha_256(const std::string& str_for_encode)
 {
-    GLFWwindow* window;
-    glfwSetErrorCallback(error_callback);
-    if (!glfwInit())
-        return -1;
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int length = 0;
 
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) return "";
 
-    window = glfwCreateWindow(640, 480, "Sierpinski example", NULL, NULL);
-    if (!window)
+    EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr);
+    EVP_DigestUpdate(ctx,
+        reinterpret_cast<const unsigned char*>(str_for_encode.c_str()),
+        str_for_encode.size());
+    EVP_DigestFinal_ex(ctx, hash, &length);
+
+    EVP_MD_CTX_free(ctx);
+
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+
+    for (unsigned int i = 0; i < length; i++)
     {
-        glfwTerminate();
-        return -1;
+        oss << std::setw(2) << static_cast<int>(hash[i]);
     }
-    glfwMakeContextCurrent(window);
-    glfwSetKeyCallback(window, key_callback);
+
+    return oss.str();
+}
+
+int main(void){
+
+    int user_action_number = 0;
+    int user_action_bf_method = 0;
+    std::string str_for_encode = "system_▀";
+    int hash_type = 0;
+    std::string enc_str="system_▀";
 
 
-    std::vector<triangle> image;
-    generateTriangle(image, 5, point(0, 1), point(-0.8, -0.8), point(0.8, -0.8));
-    std::cout << "Draw " << image.size() << " triangles..." << std::endl;
-    while (!glfwWindowShouldClose(window))
-    {
-        float ratio;
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-        ratio = width / (float) height;
-        glViewport(0, 0, width, height);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
+    while (true){
+    std::cout << "Hi! this a pentest instrument,okey,just select what need for u,select Number. \n";
+    std::cout <<"1: Change BruteForce Method. \n";
+    std::cout <<"2: Encode hash from str. \n";
+    std::cout <<"3: BruteForce hash, Start Attack.  \n";
+    std::cout <<"4: Change current hash type for actions.  \n \n ";
 
+    std::cout <<"~~~ ";
 
-        glOrtho(-ratio, ratio, -1.0, 1.0, 1.0, -1.0);
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
+    std::cin >> user_action_number;
 
-        glRotatef(glfwGetTime() * 50.0, 0.0 , 0.0 , 1.0);
-        glBegin(GL_TRIANGLES);
-        // go trought all triangles and draw them
-        for(const triangle& item : image)
-        {
-            glColor3f(1.0, 0.0, 0.0);
-            glVertex3f(item.top.x, item.top.y, 0.0);
-            glColor3f(0.0, 1.0, 0.0);
-            glVertex3f(item.bot_left.x, item.bot_left.y, 0.0);
-            glColor3f(0.0, 0.0, 1.0);
-            glVertex3f(item.bot_right.x, item.bot_right.y, 0.0);
+    if (user_action_number == 0){
+        std::cout <<"FUUUUUUUUUUUUUCk.";
+        return 1;
+    }
+    else if (user_action_number == 1){
+        std::cout <<"Please select bf method from list: \n\n";
+        std::cout <<"1: attack by dictionary(chars massive,lenght,pass_side,dic_side);\n";
+        std::cout <<"2: not realized; \n";
+        
+        std::cout <<"\n\n~~~ ";
+
+        std::cin >> user_action_bf_method;
+
+        if (user_action_bf_method==1){
+            std::cout << "setted; \n\n\n\n\n";
+
         }
-        glEnd();
 
-        glfwSwapBuffers(window);
-        glfwPollEvents();
     }
-    glfwDestroyWindow(window);
-     glfwTerminate();
-     return 0;
+    else if (user_action_number == 2){
+        std::cout <<"Please enter str for encode: ~~~ ";
+        std::cin >> str_for_encode;
+
+        if (str_for_encode!="system_▀"){
+            std::cout <<"encoding...; \n\n\n";
+
+            if (hash_type==0){
+                std::cout <<"error_0notallowed;\n\n\n";
+                break;
+            }
+            else if (hash_type==1){
+                enc_str = encode_hash_fstr_md5(str_for_encode);
+                std::cout << "md5_hash:  " << enc_str << "   ;\n\n\n";
+                
+            }
+            else if (hash_type==2){
+                enc_str = encode_hash_fstr_sha_256(str_for_encode);
+                std::cout << "sha-256_hash:  " << enc_str << "   ;\n\n\n";
+                
+            }
+            
+
+        }
+        
+    }
+    else if (user_action_number==4){
+        std::cout <<"Please select hash type from list: \n\n";
+        std::cout <<"1: MD5;\n";
+        std::cout <<"2: SHA-256;\n";
+
+
+        std::cin >> hash_type;
+
+        std::cout <<"setted; \n\n";
+
+
+    }
+
+    }
+
+
+    return 0;
  }
