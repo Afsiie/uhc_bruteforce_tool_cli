@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1776287021 source:c:\users\afs02\onedrive\Документы\codeblocksprojects\uhc_bruteforce_tool_cli\main.cpp
+1776373795 source:c:\users\afs02\onedrive\Документы\codeblocksprojects\uhc_bruteforce_tool_cli\main.cpp
 	<GLFW/glfw3.h>
 	<iostream>
 	<vector>
@@ -9,6 +9,8 @@
 	<openssl/md5.h>
 	<openssl/evp.h>
 	<openssl/crypto.h>
+	<cctype>
+	<chrono>
 	<sstream>
 	<iomanip>
 	<algorithm>

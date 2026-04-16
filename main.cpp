@@ -7,6 +7,8 @@
 #include <openssl/md5.h>
 #include <openssl/evp.h>
 #include <openssl/crypto.h>
+#include <cctype>
+#include <chrono>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -64,9 +66,33 @@ std::string encode_hash_fstr_sha_256(const std::string& str_for_encode)
 
 std::string toHexStrDebug(const unsigned char* hash, size_t len) {
     std::stringstream ss;
-    for(size_t i = 0; i < len; ++i)
+    for (size_t i = 0; i < len; ++i) {
         ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    }
     return ss.str();
+}
+
+static std::string formatElapsedTime(std::chrono::steady_clock::duration d) {
+    using namespace std::chrono;
+
+    auto ms_total = duration_cast<milliseconds>(d).count();
+
+    long long hours = ms_total / 3600000;
+    ms_total %= 3600000;
+
+    long long minutes = ms_total / 60000;
+    ms_total %= 60000;
+
+    long long seconds = ms_total / 1000;
+    long long milliseconds = ms_total % 1000;
+
+    std::ostringstream oss;
+    oss << std::setw(2) << std::setfill('0') << hours << ":"
+        << std::setw(2) << std::setfill('0') << minutes << ":"
+        << std::setw(2) << std::setfill('0') << seconds << "."
+        << std::setw(3) << std::setfill('0') << milliseconds;
+
+    return oss.str();
 }
 
 std::string bruteForceOpenSSLHash(
@@ -78,30 +104,36 @@ std::string bruteForceOpenSSLHash(
     const unsigned char* targetHash,
     size_t hashLen,
     const EVP_MD* md,
-    bool debug) 
+    bool debug)
 {
     std::string candidate(pwdLength, ' ');
     std::vector<size_t> idx(pwdLength, 0);
+
     
-    // Подготовка словаря
     std::vector<char> actualDict(dictSize);
-    for(size_t i = 0; i < dictSize; ++i) {
+    for (size_t i = 0; i < dictSize; ++i) {
         actualDict[i] = (dicSide == 1) ? dict[i] : dict[dictSize - 1 - i];
     }
 
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        std::cerr << "EVP_MD_CTX_new failed\n";
+        return "NOT_FOUND";
+    }
+
     unsigned char curHash[EVP_MAX_MD_SIZE];
-    unsigned int currentHashLen;
+    unsigned int currentHashLen = 0;
     size_t attempts = 0;
 
-    
-    std::string targetHex = "";
-    if (hashLen > 30) { 
+    std::string targetHex;
+    if (hashLen > 30) {
         targetHex = std::string(reinterpret_cast<const char*>(targetHash));
-    } else { 
+    } else {
         targetHex = toHexStrDebug(targetHash, hashLen);
     }
     targetHex.erase(std::remove_if(targetHex.begin(), targetHex.end(), ::isspace), targetHex.end());
+
+    const auto startTime = std::chrono::steady_clock::now();
 
     while (true) {
         for (size_t i = 0; i < pwdLength; ++i) {
@@ -113,36 +145,59 @@ std::string bruteForceOpenSSLHash(
         EVP_DigestFinal_ex(ctx, curHash, &currentHashLen);
 
         std::string currentHex = toHexStrDebug(curHash, currentHashLen);
-        attempts++;
+        ++attempts;
+
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = now - startTime;
+        std::string elapsedStr = formatElapsedTime(elapsed);
 
         if (debug) {
-            std::cout << "Attempt " << attempts << ": [" << candidate << "] -> " << currentHex << "\n";
+            std::cout << "Time: " << elapsedStr
+                      << " | Attempt: " << attempts
+                      << " | Password: [" << candidate << "]"
+                      << " | Hash: " << currentHex << "\n";
         }
 
         if (currentHex == targetHex) {
             std::cout << "\n\n" << std::string(40, '!') << std::endl;
-            std::cout << "MATCH FOUND! PASSWORD IS: " << candidate << std::endl;
+            std::cout << "MATCH FOUND!\n";
+            std::cout << "Time: " << elapsedStr << std::endl;
+            std::cout << "Attempts: " << attempts << std::endl;
+            std::cout << "Password: " << candidate << std::endl;
+            std::cout << "Hash: " << currentHex << std::endl;
             std::cout << std::string(40, '!') << "\n\n" << std::endl;
-            
+
             EVP_MD_CTX_free(ctx);
-            return candidate; 
+            return candidate;
         }
 
         // Одометр
         bool carry = true;
         if (passSide == 1) { // L-to-R
             for (int pos = (int)pwdLength - 1; pos >= 0 && carry; --pos) {
-                if (++idx[pos] == dictSize) { idx[pos] = 0; } 
-                else { carry = false; }
+                if (++idx[pos] == dictSize) {
+                    idx[pos] = 0;
+                } else {
+                    carry = false;
+                }
             }
         } else { // R-to-L
             for (size_t pos = 0; pos < pwdLength && carry; ++pos) {
-                if (++idx[pos] == dictSize) { idx[pos] = 0; } 
-                else { carry = false; }
+                if (++idx[pos] == dictSize) {
+                    idx[pos] = 0;
+                } else {
+                    carry = false;
+                }
             }
         }
-        if (carry) break; 
+
+        if (carry) break;
     }
+
+    auto totalElapsed = std::chrono::steady_clock::now() - startTime;
+    std::cout << "NOT FOUND\n";
+    std::cout << "Time: " << formatElapsedTime(totalElapsed) << std::endl;
+    std::cout << "Attempts: " << attempts << std::endl;
 
     EVP_MD_CTX_free(ctx);
     return "NOT_FOUND";
